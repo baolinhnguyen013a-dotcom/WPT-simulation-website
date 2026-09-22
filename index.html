@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WPT Workbench</title>
+    <!-- Include Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-0 overflow-hidden"><style>body>.max-w-xl{display:none}.wb{height:100vh;background:#09111e}.panel{background:#111c2c;border:1px solid #26364d}.field{width:100%;background:#0b1422;border:1px solid #31445f;border-radius:6px;padding:7px;color:#e5eefb;font-size:12px}.lab{font-size:10px;color:#8ba0bc;text-transform:uppercase;letter-spacing:.08em}.gridbg{background-color:#0a1321;background-image:linear-gradient(#1d2d43 1px,transparent 1px),linear-gradient(90deg,#1d2d43 1px,transparent 1px);background-size:24px 24px}</style><div class="wb flex flex-col"><header class="h-14 bg-[#0d1726] border-b border-slate-700 flex items-center px-4 gap-4"><b class="text-teal-300">◉ WPT WORKBENCH</b><span class="text-xs text-slate-400">Magnetic coupling simulation</span><button onclick="location.reload()" class="text-xs">New model</button><div class="ml-auto"><span id="solveStatus" class="text-xs text-slate-400 mr-3">● Not solved</span><button onclick="runSimulation()" class="bg-teal-500 text-slate-950 font-semibold text-xs px-4 py-2 rounded">▶ Run simulation</button></div></header><main class="flex-1 min-h-0 grid grid-cols-[220px_minmax(380px,1fr)_270px] gap-3 p-3"><aside class="panel rounded-lg p-3 overflow-y-auto"><p class="lab">Project</p><input class="field mt-2" value="Untitled WPT System"><p class="lab mt-5">Model tree</p><div id="tree" class="mt-2"></div><p class="lab mt-5">Add component</p><div class="grid grid-cols-2 gap-2 mt-2"><button onclick="addPart('coil')" class="border border-slate-700 rounded p-2 text-xs">◉ Coil</button><button onclick="addPart('load')" class="border border-slate-700 rounded p-2 text-xs">▣ Load</button><button class="border border-slate-700 rounded p-2 text-xs">▤ Ferrite</button><button class="border border-slate-700 rounded p-2 text-xs">ϟ Source</button></div><p class="lab mt-5">Study setup</p><label class="text-xs">Frequency kHz<input id="frequency" type="number" class="field mt-1" value="85"></label></aside><section class="panel rounded-lg flex flex-col overflow-hidden"><div class="h-10 p-3 border-b border-slate-700 text-xs"><span class="text-teal-300">Geometry</span> <span class="text-slate-500">/ 2D top view</span></div><div id="canvas" class="gridbg relative flex-1"><svg class="absolute inset-0 w-full h-full" viewBox="0 0 900 620"><defs><filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs><g id="scene"></g></svg><div class="absolute bottom-3 left-3 bg-slate-950/80 border border-slate-700 rounded px-3 py-2 text-[11px] text-slate-400">Grid: 10 mm · <span id="coordinate">X: — Y: —</span></div></div><div class="h-24 border-t border-slate-700 grid grid-cols-3 divide-x divide-slate-700"><div class="p-3"><p class="lab">Coupling coefficient</p><p id="coupling" class="text-xl text-teal-300">0.218</p></div><div class="p-3"><p class="lab">Estimated efficiency</p><p id="efficiency" class="text-xl text-teal-300">91.4%</p></div><div class="p-3"><p class="lab">Air gap</p><p id="airGap" class="text-xl">120 mm</p></div></div></section><aside class="panel rounded-lg p-4 overflow-y-auto"><p class="lab">Properties</p><h2 id="selectedName" class="font-medium mt-1">Transmitter coil</h2><div class="space-y-3 mt-4 text-xs"><label>Radius mm<input id="radius" type="number" class="field mt-1" value="105" oninput="setCoil('r',+this.value)"></label><label>Turns<input id="turns" type="number" class="field mt-1" value="12" oninput="setCoil('turns',+this.value)"></label><label>Position X mm<input id="posx" type="number" class="field mt-1" value="260" oninput="setCoil('x',+this.value)"></label></div><div class="border-t border-slate-700 mt-5 pt-4"><p class="lab">Cloud log</p><input id="authorInput" class="field mt-2" placeholder="Name / device ID"><textarea id="messageInput" rows="2" class="field mt-2" placeholder="Optional test note..."></textarea><button onclick="sendDataToFirebase()" class="mt-2 w-full bg-slate-700 rounded p-2 text-xs">Sync model to Firebase</button><div id="boardContainer" class="mt-3 space-y-2 max-h-32 overflow-y-auto text-xs text-slate-400">Connecting…</div></div></aside></main></div><script>const parts=[{id:'tx',name:'Transmitter coil',type:'coil',x:260,y:310,r:105,turns:12,color:'#2dd4bf'},{id:'rx',name:'Receiver coil',type:'coil',x:640,y:310,r:82,turns:10,color:'#60a5fa'}];let selected='tx';function cur(){return parts.find(p=>p.id===selected)}function draw(){tree.innerHTML=parts.map(p=>`<button onclick="selectPart('${p.id}')" class="w-full text-left p-2 rounded text-xs ${p.id===selected?'bg-teal-400/10 text-teal-200':'text-slate-300'}">${p.type==='coil'?'◉':'▣'} ${p.name}</button>`).join('');let p=cur();selectedName.textContent=p.name;radius.value=p.r;turns.value=p.turns;posx.value=p.x;scene.innerHTML=`<path d="M260 310 C390 130 510 130 640 310" fill="none" stroke="#51e2c2" stroke-width="2" stroke-dasharray="7 8" opacity=".7"/>`+parts.map(x=>x.type==='coil'?`<g transform="translate(${x.x},${x.y})" onclick="selectPart('${x.id}')"><circle r="${x.r+12}" fill="${x.id===selected?'#2dd4bf18':'none'}" stroke="${x.id===selected?'#5eead4':'none'}" stroke-dasharray="5 5"/>${Array.from({length:Math.min(x.turns,16)},(_,i)=>`<circle r="${x.r-i*4}" fill="none" stroke="${x.color}" stroke-width="2.3" filter="url(#glow)"/>`).join('')}<text y="${x.r+28}" text-anchor="middle" fill="#cbd5e1" font-size="14">${x.name}</text></g>`:`<g transform="translate(${x.x},${x.y})"><rect x="-42" y="-24" width="84" height="48" rx="6" fill="#26364d" stroke="#94a3b8"/><text text-anchor="middle" y="4" fill="white" font-size="12">${x.name}</text></g>`).join('');let a=parts[0],b=parts[1],gap=Math.max(0,Math.round(Math.hypot(b.x-a.x,b.y-a.y)-a.r-b.r)),k=Math.max(.03,Math.min(.45,.37-gap/1300));airGap.textContent=gap+' mm';coupling.textContent=k.toFixed(3);efficiency.textContent=(77+k*66).toFixed(1)+'%'}function selectPart(id){selected=id;draw()}function setCoil(k,v){cur()[k]=v;draw()}function addPart(type){parts.push({id:Date.now()+'',name:type[0].toUpperCase()+type.slice(1)+' '+(parts.length-1),type,x:450,y:440,r:55,turns:6,color:'#fbbf24'});selected=parts.at(-1).id;draw()}function runSimulation(){solveStatus.innerHTML='<span class="text-amber-300">● Solving…</span>';setTimeout(()=>solveStatus.innerHTML='<span class="text-emerald-300">● Solved · 0.18 s</span>',700)}canvas.onmousemove=e=>{let r=canvas.getBoundingClientRect();coordinate.textContent=`X: ${Math.round((e.clientX-r.left)/r.width*900)} Y: ${Math.round((e.clientY-r.top)/r.height*620)}`};draw();</script>
+    <div class="max-w-xl mx-auto space-y-6">
+
+        <!-- Header -->
+        <header class="text-center">
+            <h1 class="text-2xl font-bold text-emerald-400">WPT Simulation Data Board</h1>
+            <p class="text-sm text-slate-400 mt-1">Enter data below to submit and sync in real-time with Firebase Cloud Database.</p>
+        </header>
+
+        <!-- Input Form -->
+        <div class="bg-slate-800 p-5 rounded-xl shadow-lg border border-slate-700 space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Your Name / Device ID:</label>
+                <input type="text" id="authorInput" placeholder="e.g., Leroi_Ansys"
+                    class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">Data / Note to Transmit:</label>
+                <textarea id="messageInput" rows="3" placeholder="Enter simulation parameters or test notes..."
+                    class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-emerald-500"></textarea>
+            </div>
+            <button onclick="sendDataToFirebase()"
+                class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-lg transition duration-200">
+                🚀 Send & Sync to Firebase
+            </button>
+        </div>
+
+        <!-- Data Board Display Area -->
+        <div class="bg-slate-800 p-5 rounded-xl shadow-lg border border-slate-700">
+            <h2 class="text-lg font-semibold text-slate-200 mb-3 border-b border-slate-700 pb-2">📡 Cloud Receiver Board (Real-Time Sync)</h2>
+            <div id="boardContainer" class="space-y-3 max-h-96 overflow-y-auto">
+                <p class="text-slate-500 text-sm text-center py-4">Connecting to Firebase...</p>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Firebase SDK (Modular v10 CDN) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        // ==========================================
+        // Firebase Configuration (Pre-configured)
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyAclXV050kuy1Bid1dLryK8OXqpnY5j2T0",
+            authDomain: "wpt-simulation-37ed8.firebaseapp.com",
+            projectId: "wpt-simulation-37ed8",
+            storageBucket: "wpt-simulation-37ed8.firebasestorage.app",
+            messagingSenderId: "519038886087",
+            appId: "1:519038886087:web:e6a1796bcfae37b240dee2"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // Bind send button event to global scope for HTML onclick
+        window.sendDataToFirebase = async function() {
+            const author = document.getElementById('authorInput').value.trim() || "Anonymous User";
+            const message = document.getElementById('messageInput').value.trim() || "WPT workbench model synchronized";
+
+            try {
+                // Write data to Firestore collection named "messages"
+                await addDoc(collection(db, "messages"), {
+                    author: author,
+                    text: message,
+                    timestamp: serverTimestamp()
+                });
+
+                // Clear input box after success
+                document.getElementById('messageInput').value = "";
+                console.log("Data successfully sent to Firebase!");
+            } catch (e) {
+                console.error("Error writing to database: ", e);
+                alert("Failed to send. Check console for details.");
+            }
+        };
+
+        // Real-time listener for database changes
+        const q = query(collection(db, "messages"), orderBy("timestamp", "desc"));
+
+        onSnapshot(q, (snapshot) => {
+            const container = document.getElementById('boardContainer');
+            container.innerHTML = ""; // Clear current list
+
+            if (snapshot.empty) {
+                container.innerHTML = `<p class="text-slate-500 text-sm text-center py-4">No data found. Send your first message above!</p>`;
+                return;
+            }
+
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                const timeStr = data.timestamp ? new Date(data.timestamp.toDate()).toLocaleString() : "Just now";
+
+                // Render each message card on the board
+                const card = document.createElement('div');
+                card.className = "bg-slate-900 p-3 rounded-lg border border-slate-700/60 text-sm";
+                card.innerHTML = `
+                    <div class="flex justify-between text-xs text-slate-400 mb-1">
+                        <span class="font-medium text-emerald-400">👤 ${escapeHtml(data.author)}</span>
+                        <span>${timeStr}</span>
+                    </div>
+                    <p class="text-slate-200 whitespace-pre-wrap">${escapeHtml(data.text)}</p>
+                `;
+                container.appendChild(card);
+            });
+        });
+
+        // Simple utility to escape HTML and prevent XSS
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        }
+    </script>
+</body>
+</html>
